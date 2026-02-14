@@ -3,6 +3,8 @@ import { getOAuthClient, getBaseUrl } from '@/lib/auth'
 import { Agent } from '@atproto/api'
 import { cookies } from 'next/headers'
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     const client = await getOAuthClient()
@@ -13,7 +15,6 @@ export async function GET(request: NextRequest) {
     const did = session.did
     let handle: string = did
 
-    // Create an Agent using the session to get the user's handle
     try {
       const agent = new Agent(session)
       const res = await agent.com.atproto.server.getSession()
@@ -22,17 +23,16 @@ export async function GET(request: NextRequest) {
       // If we can't fetch profile, just use DID
     }
 
-    // Set cookies and redirect to welcome page
     const cookieStore = await cookies()
     cookieStore.set('user_did', did, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24,
     })
     cookieStore.set('user_handle', handle, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24,
     })

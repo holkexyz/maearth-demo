@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getOAuthClient, getBaseUrl } from '@/lib/auth'
 
+export const runtime = 'nodejs'
+
 export async function GET() {
   try {
     const client = await getOAuthClient()

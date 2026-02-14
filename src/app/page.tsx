@@ -14,7 +14,7 @@ export default function Home() {
         textAlign: 'center',
       }}>
         <div style={{ marginBottom: '48px' }}>
-          <img src="/logo.png" alt="Ma Earth" style={{ height: '40px', marginBottom: '16px' }} />
+          <img src="/logo.png" alt="Ma Earth" style={{ height: '80px', marginBottom: '16px' }} />
           <p style={{
             fontSize: '17px',
             color: '#6b6b6b',
@@ -25,7 +25,7 @@ export default function Home() {
           </p>
         </div>
 
-        <form action="/api/oauth/login" method="GET" style={{ margin: 0 }}>
+        <form action="/api/oauth/login" method="GET" style={{ margin: '0 auto', maxWidth: '290px' }}>
           <div style={{ marginBottom: '16px', textAlign: 'left' }}>
             <label htmlFor="email" style={{
               display: 'block',

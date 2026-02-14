@@ -15,14 +15,6 @@ export default function Home() {
       }}>
         <div style={{ marginBottom: '48px' }}>
           <img src="/logo.png" alt="Ma Earth" style={{ height: '80px', marginBottom: '16px' }} />
-          <p style={{
-            fontSize: '17px',
-            color: '#6b6b6b',
-            lineHeight: 1.6,
-            margin: 0,
-          }}>
-            Nourishing people and planet
-          </p>
         </div>
 
         <form action="/api/oauth/login" method="GET" style={{ margin: '0 auto', maxWidth: '290px' }}>
@@ -75,7 +67,7 @@ export default function Home() {
             }}
           >
             <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
-            <span style={{ width: '20px' }}></span>
+            <span style={{ width: '12px' }}></span>
             Sign in with Certified
           </button>
         </form>

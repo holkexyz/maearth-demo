@@ -6,6 +6,7 @@ export default function Home() {
       justifyContent: 'center',
       minHeight: '100vh',
       padding: '20px',
+      background: '#F2EBE4',
     }}>
       <div style={{
         maxWidth: '440px',
@@ -30,7 +31,7 @@ export default function Home() {
               display: 'block',
               fontSize: '14px',
               fontWeight: 500,
-              color: '#4a4a4a',
+              color: '#1A130F',
               marginBottom: '6px',
             }}>
               Email address
@@ -51,39 +52,33 @@ export default function Home() {
                 outline: 'none',
                 boxSizing: 'border-box',
                 background: '#fff',
+                color: '#1A130F',
               }}
             />
           </div>
           <button
             type="submit"
             style={{
-              display: 'block',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               width: '100%',
               padding: '14px 28px',
               fontSize: '16px',
               fontWeight: 500,
               color: '#faf9f6',
-              background: '#4a6741',
+              background: '#1A130F',
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
               letterSpacing: '0.3px',
             }}
           >
-            Sign in
+            <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
+            <span style={{ width: '20px' }}></span>
+            Sign in with Certified
           </button>
         </form>
-
-        <p style={{
-          marginTop: '32px',
-          fontSize: '13px',
-          color: '#999',
-          lineHeight: 1.5,
-        }}>
-          Sign in with your Certified identity.
-          <br />
-          Powered by the AT Protocol.
-        </p>
       </div>
     </div>
   )

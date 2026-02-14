@@ -26,6 +26,7 @@ export default async function Welcome() {
       justifyContent: 'center',
       minHeight: '100vh',
       padding: '20px',
+      background: '#F2EBE4',
     }}>
       <div style={{
         maxWidth: '520px',
@@ -37,7 +38,7 @@ export default async function Welcome() {
           fontWeight: 300,
           letterSpacing: '-0.5px',
           margin: '0 0 8px 0',
-          color: '#2d2d2d',
+          color: '#1A130F',
         }}>
           Welcome to Ma Earth
         </h1>
@@ -62,7 +63,7 @@ export default async function Welcome() {
             <div style={{ fontSize: '12px', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
               Handle
             </div>
-            <div style={{ fontSize: '17px', color: '#2d2d2d' }}>
+            <div style={{ fontSize: '17px', color: '#1A130F' }}>
               @{userHandle}
             </div>
           </div>
@@ -87,9 +88,9 @@ export default async function Welcome() {
             style={{
               padding: '10px 24px',
               fontSize: '14px',
-              color: '#4a6741',
+              color: '#1A130F',
               background: 'transparent',
-              border: '1px solid #4a6741',
+              border: '1px solid #1A130F',
               borderRadius: '8px',
               cursor: 'pointer',
             }}

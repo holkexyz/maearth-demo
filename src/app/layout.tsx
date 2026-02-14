@@ -17,8 +17,8 @@ export default function RootLayout({
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',
-        background: '#faf9f6',
-        color: '#2d2d2d',
+        background: '#F2EBE4',
+        color: '#1A130F',
         minHeight: '100vh',
       } as React.CSSProperties}>
         {children}

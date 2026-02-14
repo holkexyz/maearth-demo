@@ -4,8 +4,9 @@ export default function Home() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: '100vh',
-      padding: '20px', paddingBottom: '20vh',
+      height: '100vh',
+      padding: '20px',
+      overflow: 'hidden',
       background: '#F2EBE4',
     }}>
       <div style={{

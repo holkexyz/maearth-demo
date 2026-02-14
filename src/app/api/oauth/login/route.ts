@@ -7,8 +7,10 @@ import {
 
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url)
+    const email = url.searchParams.get('email') || ''
     const baseUrl = getBaseUrl()
     const clientId = `${baseUrl}/client-metadata.json`
     const redirectUri = `${baseUrl}/api/oauth/callback`
@@ -82,7 +84,8 @@ export async function GET() {
         }
 
         const parData2 = await parRes2.json() as { request_uri: string }
-        const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}`
+        const loginHint = email ? `&login_hint=${encodeURIComponent(email)}` : ''
+        const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}${loginHint}`
         console.log('[oauth/login] Redirecting to auth (after nonce retry)')
         return NextResponse.redirect(authUrl)
       }
@@ -91,7 +94,8 @@ export async function GET() {
     }
 
     const parData = await parRes.json() as { request_uri: string }
-    const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}`
+    const loginHintParam = email ? `&login_hint=${encodeURIComponent(email)}` : ''
+    const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}${loginHintParam}`
 
     console.log('[oauth/login] Redirecting to auth:', authUrl.substring(0, 200))
     return NextResponse.redirect(authUrl)

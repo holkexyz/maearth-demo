@@ -32,26 +32,55 @@ export default function Home() {
           </p>
         </div>
 
-        <a
-          href="/api/oauth/login"
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '14px 28px',
-            fontSize: '16px',
-            fontWeight: 500,
-            color: '#faf9f6',
-            background: '#4a6741',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            letterSpacing: '0.3px',
-            textDecoration: 'none',
-            boxSizing: 'border-box',
-          }}
-        >
-          Sign in
-        </a>
+        <form action="/api/oauth/login" method="GET" style={{ margin: 0 }}>
+          <div style={{ marginBottom: '16px', textAlign: 'left' }}>
+            <label htmlFor="email" style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: '#4a4a4a',
+              marginBottom: '6px',
+            }}>
+              Email address
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              required
+              autoFocus
+              placeholder="you@example.com"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                fontSize: '16px',
+                border: '1px solid #d4d0cb',
+                borderRadius: '8px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                background: '#fff',
+              }}
+            />
+          </div>
+          <button
+            type="submit"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '14px 28px',
+              fontSize: '16px',
+              fontWeight: 500,
+              color: '#faf9f6',
+              background: '#4a6741',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              letterSpacing: '0.3px',
+            }}
+          >
+            Sign in
+          </button>
+        </form>
 
         <p style={{
           marginTop: '32px',

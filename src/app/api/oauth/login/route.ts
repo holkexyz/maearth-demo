@@ -1,28 +1,104 @@
 import { NextResponse } from 'next/server'
-import { getOAuthClient, getBaseUrl } from '@/lib/auth'
+import {
+  getBaseUrl, generateCodeVerifier, generateCodeChallenge,
+  generateState, saveState, getDpopKeyPair, createDpopProof,
+  PAR_ENDPOINT, AUTH_ENDPOINT,
+} from '@/lib/auth'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    console.log('[oauth/login] Starting OAuth flow...')
-    const client = await getOAuthClient()
-    console.log('[oauth/login] OAuth client created, authorizing against pds.certs.network...')
+    const baseUrl = getBaseUrl()
+    const clientId = `${baseUrl}/client-metadata.json`
+    const redirectUri = `${baseUrl}/api/oauth/callback`
 
-    const url = await client.authorize('pds.certs.network', {
-      scope: 'atproto transition:generic',
+    // Generate PKCE
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = generateCodeChallenge(codeVerifier)
+    const state = generateState()
+
+    // Save state + verifier
+    saveState(state, codeVerifier)
+
+    // Generate DPoP proof for PAR
+    const { privateKey, jwk } = await getDpopKeyPair()
+    const dpopProof = createDpopProof({
+      privateKey, jwk,
+      method: 'POST',
+      url: PAR_ENDPOINT,
     })
 
-    console.log('[oauth/login] Got authorize URL:', url.toString().substring(0, 200))
-    return NextResponse.redirect(url.toString())
+    // Push Authorization Request (PAR)
+    const parBody = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'atproto transition:generic',
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    })
+
+    console.log('[oauth/login] Sending PAR to', PAR_ENDPOINT)
+
+    const parRes = await fetch(PAR_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'DPoP': dpopProof,
+      },
+      body: parBody.toString(),
+    })
+
+    if (!parRes.ok) {
+      const errText = await parRes.text()
+      console.error('[oauth/login] PAR failed:', parRes.status, errText)
+
+      // Check for DPoP nonce requirement
+      const dpopNonce = parRes.headers.get('dpop-nonce')
+      if (dpopNonce && parRes.status === 400) {
+        console.log('[oauth/login] Retrying with DPoP nonce...')
+        const dpopProof2 = createDpopProof({
+          privateKey, jwk,
+          method: 'POST',
+          url: PAR_ENDPOINT,
+          nonce: dpopNonce,
+        })
+
+        const parRes2 = await fetch(PAR_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'DPoP': dpopProof2,
+          },
+          body: parBody.toString(),
+        })
+
+        if (!parRes2.ok) {
+          const errText2 = await parRes2.text()
+          console.error('[oauth/login] PAR retry failed:', parRes2.status, errText2)
+          return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('PAR failed: ' + errText2)}`, baseUrl))
+        }
+
+        const parData2 = await parRes2.json() as { request_uri: string }
+        const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}`
+        console.log('[oauth/login] Redirecting to auth (after nonce retry)')
+        return NextResponse.redirect(authUrl)
+      }
+
+      return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('PAR failed: ' + errText)}`, baseUrl))
+    }
+
+    const parData = await parRes.json() as { request_uri: string }
+    const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}`
+
+    console.log('[oauth/login] Redirecting to auth:', authUrl.substring(0, 200))
+    return NextResponse.redirect(authUrl)
   } catch (err) {
-    console.error('[oauth/login] Error:', err instanceof Error ? err.message : err)
-    console.error('[oauth/login] Stack:', err instanceof Error ? err.stack : 'no stack')
-    // Return error details in dev/debug mode
+    console.error('[oauth/login] Error:', err)
     const baseUrl = getBaseUrl()
     const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-    return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent(errorMsg)}`, baseUrl)
-    )
+    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(errorMsg)}`, baseUrl))
   }
 }

@@ -1,30 +1,131 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getOAuthClient, getBaseUrl } from '@/lib/auth'
-import { Agent } from '@atproto/api'
+import {
+  getBaseUrl, getAndDeleteState, getDpopKeyPair, createDpopProof,
+  TOKEN_ENDPOINT, PDS_URL,
+} from '@/lib/auth'
 import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl()
+
   try {
-    const client = await getOAuthClient()
-    const params = new URLSearchParams(request.nextUrl.search)
+    const code = request.nextUrl.searchParams.get('code')
+    const state = request.nextUrl.searchParams.get('state')
+    const error = request.nextUrl.searchParams.get('error')
 
-    const { session } = await client.callback(params)
-
-    const did = session.did
-    let handle: string = did
-
-    try {
-      const agent = new Agent(session)
-      const res = await agent.com.atproto.server.getSession()
-      handle = res.data.handle || did
-    } catch {
-      // If we can't fetch profile, just use DID
+    if (error) {
+      console.error('[oauth/callback] Auth error:', error)
+      return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(error)}`, baseUrl))
     }
 
+    if (!code || !state) {
+      return NextResponse.redirect(new URL('/?error=missing_code_or_state', baseUrl))
+    }
+
+    // Retrieve PKCE verifier
+    const codeVerifier = getAndDeleteState(state)
+    if (!codeVerifier) {
+      return NextResponse.redirect(new URL('/?error=invalid_state', baseUrl))
+    }
+
+    const clientId = `${baseUrl}/client-metadata.json`
+    const redirectUri = `${baseUrl}/api/oauth/callback`
+
+    // Exchange code for tokens with DPoP
+    const { privateKey, jwk } = await getDpopKeyPair()
+
+    const tokenBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: codeVerifier,
+    })
+
+    // First attempt
+    let dpopProof = createDpopProof({
+      privateKey, jwk,
+      method: 'POST',
+      url: TOKEN_ENDPOINT,
+    })
+
+    let tokenRes = await fetch(TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'DPoP': dpopProof,
+      },
+      body: tokenBody.toString(),
+    })
+
+    // Handle DPoP nonce requirement
+    if (!tokenRes.ok) {
+      const dpopNonce = tokenRes.headers.get('dpop-nonce')
+      if (dpopNonce) {
+        console.log('[oauth/callback] Retrying token exchange with DPoP nonce...')
+        dpopProof = createDpopProof({
+          privateKey, jwk,
+          method: 'POST',
+          url: TOKEN_ENDPOINT,
+          nonce: dpopNonce,
+        })
+
+        tokenRes = await fetch(TOKEN_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'DPoP': dpopProof,
+          },
+          body: tokenBody.toString(),
+        })
+      }
+    }
+
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text()
+      console.error('[oauth/callback] Token exchange failed:', tokenRes.status, errText)
+      return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('Token exchange failed')}`, baseUrl))
+    }
+
+    const tokenData = await tokenRes.json() as {
+      access_token: string
+      token_type: string
+      sub: string
+      scope?: string
+    }
+
+    console.log('[oauth/callback] Got tokens, sub:', tokenData.sub)
+
+    // Fetch user session/profile from PDS
+    let handle = tokenData.sub
+    try {
+      const sessionDpop = createDpopProof({
+        privateKey, jwk,
+        method: 'GET',
+        url: `${PDS_URL}/xrpc/com.atproto.server.getSession`,
+        accessToken: tokenData.access_token,
+      })
+
+      const sessionRes = await fetch(`${PDS_URL}/xrpc/com.atproto.server.getSession`, {
+        headers: {
+          'Authorization': `DPoP ${tokenData.access_token}`,
+          'DPoP': sessionDpop,
+        },
+      })
+
+      if (sessionRes.ok) {
+        const session = await sessionRes.json() as { handle?: string; did?: string }
+        handle = session.handle || tokenData.sub
+      }
+    } catch (err) {
+      console.warn('[oauth/callback] Could not fetch session:', err)
+    }
+
+    // Set cookies
     const cookieStore = await cookies()
-    cookieStore.set('user_did', did, {
+    cookieStore.set('user_did', tokenData.sub, {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
@@ -37,9 +138,10 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24,
     })
 
-    return NextResponse.redirect(new URL('/welcome', getBaseUrl()))
+    return NextResponse.redirect(new URL('/welcome', baseUrl))
   } catch (err) {
-    console.error('OAuth callback error:', err)
-    return NextResponse.redirect(new URL('/?error=auth_failed', getBaseUrl()))
+    console.error('[oauth/callback] Error:', err)
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(errorMsg)}`, baseUrl))
   }
 }

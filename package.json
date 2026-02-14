@@ -8,9 +8,6 @@
     "start": "next start"
   },
   "dependencies": {
-    "@atproto/api": "^0.18.0",
-    "@atproto/jwk-jose": "^0.1.0",
-    "@atproto/oauth-client-node": "^0.3.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

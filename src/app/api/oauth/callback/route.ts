@@ -98,29 +98,19 @@ export async function GET(request: NextRequest) {
 
     console.log('[oauth/callback] Got tokens, sub:', tokenData.sub)
 
-    // Fetch user session/profile from PDS
+    // Resolve handle from DID via PLC directory (no auth needed)
     let handle = tokenData.sub
     try {
-      const sessionDpop = createDpopProof({
-        privateKey, jwk,
-        method: 'GET',
-        url: `${PDS_URL}/xrpc/com.atproto.server.getSession`,
-        accessToken: tokenData.access_token,
-      })
-
-      const sessionRes = await fetch(`${PDS_URL}/xrpc/com.atproto.server.getSession`, {
-        headers: {
-          'Authorization': `DPoP ${tokenData.access_token}`,
-          'DPoP': sessionDpop,
-        },
-      })
-
-      if (sessionRes.ok) {
-        const session = await sessionRes.json() as { handle?: string; did?: string }
-        handle = session.handle || tokenData.sub
+      const plcRes = await fetch(`https://plc.directory/${tokenData.sub}`)
+      if (plcRes.ok) {
+        const plcData = await plcRes.json() as { alsoKnownAs?: string[] }
+        const atUri = plcData.alsoKnownAs?.find((u: string) => u.startsWith('at://'))
+        if (atUri) {
+          handle = atUri.replace('at://', '')
+        }
       }
     } catch (err) {
-      console.warn('[oauth/callback] Could not fetch session:', err)
+      console.warn('[oauth/callback] Could not resolve handle from PLC:', err)
     }
 
     // Set cookies

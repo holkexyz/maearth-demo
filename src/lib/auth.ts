@@ -1,7 +1,7 @@
 import * as crypto from 'crypto'
 
 export function getBaseUrl(): string {
-  return process.env.PUBLIC_URL || 'http://localhost:3000'
+  return (process.env.PUBLIC_URL || 'http://localhost:3000').trim()
 }
 
 // PKCE helpers

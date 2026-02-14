@@ -13,15 +13,7 @@ export default function Home() {
         textAlign: 'center',
       }}>
         <div style={{ marginBottom: '48px' }}>
-          <h1 style={{
-            fontSize: '42px',
-            fontWeight: 300,
-            letterSpacing: '-0.5px',
-            margin: '0 0 12px 0',
-            color: '#2d2d2d',
-          }}>
-            Ma Earth
-          </h1>
+          <img src="/logo.png" alt="Ma Earth" style={{ height: '40px', marginBottom: '16px' }} />
           <p style={{
             fontSize: '17px',
             color: '#6b6b6b',

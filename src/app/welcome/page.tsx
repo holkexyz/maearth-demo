@@ -33,15 +33,7 @@ export default async function Welcome() {
         width: '100%',
         textAlign: 'center',
       }}>
-        <h1 style={{
-          fontSize: '36px',
-          fontWeight: 300,
-          letterSpacing: '-0.5px',
-          margin: '0 0 8px 0',
-          color: '#1A130F',
-        }}>
-          Welcome to Ma Earth
-        </h1>
+        <img src="/logo.png" alt="Ma Earth" style={{ height: '80px', marginBottom: '8px' }} />
         <p style={{
           fontSize: '17px',
           color: '#6b6b6b',
@@ -86,13 +78,18 @@ export default async function Welcome() {
           <button
             type="submit"
             style={{
-              padding: '10px 24px',
-              fontSize: '14px',
-              color: '#1A130F',
-              background: 'transparent',
-              border: '1px solid #1A130F',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '14px 28px',
+              fontSize: '16px',
+              fontWeight: 500,
+              color: '#faf9f6',
+              background: '#1A130F',
+              border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
+              letterSpacing: '0.3px',
             }}
           >
             Sign out

@@ -13,7 +13,7 @@ export default function Home() {
         width: '100%',
         textAlign: 'center',
       }}>
-        <div style={{ marginBottom: '48px' }}>
+        <div style={{ marginBottom: '24px' }}>
           <img src="/logo.png" alt="Ma Earth" style={{ height: '80px', marginBottom: '16px' }} />
         </div>
 

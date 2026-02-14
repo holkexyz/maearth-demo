@@ -2,7 +2,7 @@
   "client_id": "https://maearth-demo.vercel.app/client-metadata.json",
   "client_name": "Ma Earth",
   "client_uri": "https://maearth-demo.vercel.app",
-  "logo_uri": "https://maearth-demo.vercel.app/logo.svg",
+  "logo_uri": "https://maearth-demo.vercel.app/logo.png",
   "redirect_uris": [
     "https://maearth-demo.vercel.app/api/oauth/callback"
   ],

@@ -17,24 +17,7 @@ export function generateState(): string {
   return crypto.randomBytes(16).toString('base64url')
 }
 
-// In-memory store for PKCE verifiers (use Redis/DB in production)
-const stateStore = new Map<string, { codeVerifier: string; createdAt: number }>()
 
-export function saveState(state: string, codeVerifier: string): void {
-  stateStore.set(state, { codeVerifier, createdAt: Date.now() })
-  // Cleanup old entries (older than 10 minutes)
-  const now = Date.now()
-  for (const [key, val] of stateStore) {
-    if (now - val.createdAt > 10 * 60 * 1000) stateStore.delete(key)
-  }
-}
-
-export function getAndDeleteState(state: string): string | null {
-  const entry = stateStore.get(state)
-  if (!entry) return null
-  stateStore.delete(state)
-  return entry.codeVerifier
-}
 
 // DPoP key pair (generated once per process)
 let dpopKeyPair: { publicKey: crypto.KeyObject; privateKey: crypto.KeyObject; jwk: object } | null = null

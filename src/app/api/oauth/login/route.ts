@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import {
   getBaseUrl, generateCodeVerifier, generateCodeChallenge,
-  generateState, saveState, getDpopKeyPair, createDpopProof,
+  generateState, getDpopKeyPair, createDpopProof,
   PAR_ENDPOINT, AUTH_ENDPOINT,
 } from '@/lib/auth'
 
@@ -19,9 +19,6 @@ export async function GET(request: Request) {
     const codeVerifier = generateCodeVerifier()
     const codeChallenge = generateCodeChallenge(codeVerifier)
     const state = generateState()
-
-    // Save state + verifier
-    saveState(state, codeVerifier)
 
     // Generate DPoP proof for PAR
     const { privateKey, jwk } = await getDpopKeyPair()
@@ -87,7 +84,9 @@ export async function GET(request: Request) {
         const loginHint = email ? `&login_hint=${encodeURIComponent(email)}` : ''
         const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}${loginHint}`
         console.log('[oauth/login] Redirecting to auth (after nonce retry)')
-        return NextResponse.redirect(authUrl)
+        const resp2 = NextResponse.redirect(authUrl)
+        resp2.cookies.set('oauth_state', JSON.stringify({ state, codeVerifier }), { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' })
+        return resp2
       }
 
       return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('PAR failed: ' + errText)}`, baseUrl))
@@ -98,7 +97,9 @@ export async function GET(request: Request) {
     const authUrl = `${AUTH_ENDPOINT}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}${loginHintParam}`
 
     console.log('[oauth/login] Redirecting to auth:', authUrl.substring(0, 200))
-    return NextResponse.redirect(authUrl)
+    const response = NextResponse.redirect(authUrl)
+    response.cookies.set('oauth_state', JSON.stringify({ state, codeVerifier }), { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' })
+    return response
   } catch (err) {
     console.error('[oauth/login] Error:', err)
     const baseUrl = getBaseUrl()

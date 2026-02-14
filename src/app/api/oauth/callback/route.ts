@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getBaseUrl, getAndDeleteState, getDpopKeyPair, createDpopProof,
+  getBaseUrl, getDpopKeyPair, createDpopProof,
   TOKEN_ENDPOINT, PDS_URL,
 } from '@/lib/auth'
 import { cookies } from 'next/headers'
@@ -24,11 +24,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=missing_code_or_state', baseUrl))
     }
 
-    // Retrieve PKCE verifier
-    const codeVerifier = getAndDeleteState(state)
-    if (!codeVerifier) {
-      return NextResponse.redirect(new URL('/?error=invalid_state', baseUrl))
+    // Retrieve PKCE verifier from cookie
+    const cookieStore = await cookies()
+    const stateCookie = cookieStore.get('oauth_state')
+    if (!stateCookie) {
+      return NextResponse.redirect(new URL('/?error=invalid_state_no_cookie', baseUrl))
     }
+    let stateData: { state: string; codeVerifier: string }
+    try {
+      stateData = JSON.parse(stateCookie.value)
+    } catch {
+      return NextResponse.redirect(new URL('/?error=invalid_state_parse', baseUrl))
+    }
+    if (stateData.state !== state) {
+      return NextResponse.redirect(new URL('/?error=invalid_state_mismatch', baseUrl))
+    }
+    const codeVerifier = stateData.codeVerifier
 
     const clientId = `${baseUrl}/client-metadata.json`
     const redirectUri = `${baseUrl}/api/oauth/callback`
@@ -113,8 +124,8 @@ export async function GET(request: NextRequest) {
       console.warn('[oauth/callback] Could not resolve handle from PLC:', err)
     }
 
-    // Set cookies
-    const cookieStore = await cookies()
+    // Set cookies (reuse cookieStore from above)
+
     cookieStore.set('user_did', tokenData.sub, {
       httpOnly: true,
       secure: true,

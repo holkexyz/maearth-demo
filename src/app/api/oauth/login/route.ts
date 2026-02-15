@@ -1,130 +1,213 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import {
-  getBaseUrl, generateCodeVerifier, generateCodeChallenge,
-  generateState, generateDpopKeyPair, createDpopProof,
-  PAR_ENDPOINT, AUTH_ENDPOINT, TOKEN_ENDPOINT,
-  resolveHandleToDid, resolveDidToPds, discoverOAuthEndpoints,
-} from '@/lib/auth'
+  getBaseUrl,
+  generateCodeVerifier,
+  generateCodeChallenge,
+  generateState,
+  generateDpopKeyPair,
+  createDpopProof,
+  PAR_ENDPOINT,
+  AUTH_ENDPOINT,
+  TOKEN_ENDPOINT,
+  resolveHandleToDid,
+  resolveDidToPds,
+  discoverOAuthEndpoints,
+} from "@/lib/auth";
+import { createOAuthSession, SESSION_COOKIE } from "@/lib/session";
+import {
+  validateEmail,
+  validateHandle,
+  sanitizeForLog,
+} from "@/lib/validation";
+import { checkRateLimit } from "@/lib/ratelimit";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
+
+const RATE_LIMIT_LOGIN = Number(process.env.RATE_LIMIT_LOGIN) || 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 export async function GET(request: Request) {
-  const baseUrl = getBaseUrl()
+  const baseUrl = getBaseUrl();
 
   try {
-    const url = new URL(request.url)
-    const email = url.searchParams.get('email') || ''
-    const handle = (url.searchParams.get('handle') || '').replace(/^@/, '').trim()
-
-    // Determine endpoints: dynamic for handle, hardcoded for email
-    let parEndpoint = PAR_ENDPOINT
-    let authEndpoint = AUTH_ENDPOINT
-    let tokenEndpoint = TOKEN_ENDPOINT
-
-    if (handle) {
-      console.log('[oauth/login] Resolving handle:', handle)
-      const did = await resolveHandleToDid(handle)
-      console.log('[oauth/login] Resolved DID:', did)
-      const pdsUrl = await resolveDidToPds(did)
-      console.log('[oauth/login] Resolved PDS:', pdsUrl)
-      const endpoints = await discoverOAuthEndpoints(pdsUrl)
-      console.log('[oauth/login] Discovered endpoints:', endpoints)
-      parEndpoint = endpoints.parEndpoint
-      authEndpoint = endpoints.authEndpoint
-      tokenEndpoint = endpoints.tokenEndpoint
+    // Rate limit by IP
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+    const rl = checkRateLimit(
+      `login:${ip}`,
+      RATE_LIMIT_LOGIN,
+      RATE_LIMIT_WINDOW_MS,
+    );
+    if (!rl.allowed) {
+      return new NextResponse("Too many requests", {
+        status: 429,
+        headers: { "Retry-After": String(rl.retryAfter) },
+      });
     }
 
-    const clientId = `${baseUrl}/client-metadata.json`
-    const redirectUri = `${baseUrl}/api/oauth/callback`
+    const url = new URL(request.url);
+    const email = url.searchParams.get("email") || "";
+    const handle = (url.searchParams.get("handle") || "")
+      .replace(/^@/, "")
+      .trim();
+
+    // Input validation
+    if (!email && !handle) {
+      return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
+    }
+    if (email && !validateEmail(email)) {
+      return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
+    }
+    if (handle && !validateHandle(handle)) {
+      return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
+    }
+
+    // Determine endpoints: dynamic for handle, hardcoded for email
+    let parEndpoint = PAR_ENDPOINT;
+    let authEndpoint = AUTH_ENDPOINT;
+    let tokenEndpoint = TOKEN_ENDPOINT;
+    let expectedDid: string | undefined;
+    let expectedPdsUrl: string | undefined;
+
+    if (handle) {
+      console.log("[oauth/login] Resolving handle:", sanitizeForLog(handle));
+      const did = await resolveHandleToDid(handle);
+      console.log("[oauth/login] Resolved DID:", sanitizeForLog(did));
+      const pdsUrl = await resolveDidToPds(did);
+      console.log("[oauth/login] Resolved PDS:", sanitizeForLog(pdsUrl));
+      const endpoints = await discoverOAuthEndpoints(pdsUrl);
+      console.log("[oauth/login] Discovered OAuth endpoints");
+      parEndpoint = endpoints.parEndpoint;
+      authEndpoint = endpoints.authEndpoint;
+      tokenEndpoint = endpoints.tokenEndpoint;
+      expectedDid = did;
+      expectedPdsUrl = pdsUrl;
+    }
+
+    const clientId = `${baseUrl}/client-metadata.json`;
+    const redirectUri = `${baseUrl}/api/oauth/callback`;
 
     // Generate PKCE
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = generateCodeChallenge(codeVerifier)
-    const state = generateState()
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const state = generateState();
 
     // Generate DPoP proof for PAR
-    const { privateKey, publicJwk, privateJwk } = generateDpopKeyPair()
+    const { privateKey, publicJwk, privateJwk } = generateDpopKeyPair();
     const dpopProof = createDpopProof({
-      privateKey, jwk: publicJwk,
-      method: 'POST',
+      privateKey,
+      jwk: publicJwk,
+      method: "POST",
       url: parEndpoint,
-    })
+    });
 
     // Push Authorization Request (PAR)
     const parBody = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
-      response_type: 'code',
-      scope: 'atproto transition:generic',
+      response_type: "code",
+      scope: "atproto transition:generic",
       state,
       code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-    })
+      code_challenge_method: "S256",
+    });
 
-    console.log('[oauth/login] Sending PAR to', parEndpoint)
+    console.log("[oauth/login] Sending PAR request");
 
     const parRes = await fetch(parEndpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'DPoP': dpopProof,
+        "Content-Type": "application/x-www-form-urlencoded",
+        DPoP: dpopProof,
       },
       body: parBody.toString(),
-    })
+    });
+
+    // Store session data server-side (not in cookie)
+    const sessionData = {
+      state,
+      codeVerifier,
+      dpopPrivateJwk: privateJwk,
+      tokenEndpoint,
+      email: email || undefined,
+      expectedDid,
+      expectedPdsUrl,
+    };
 
     if (!parRes.ok) {
-      const errText = await parRes.text()
-      console.error('[oauth/login] PAR failed:', parRes.status, errText)
+      const errText = await parRes.text();
+      console.error("[oauth/login] PAR failed:", parRes.status);
 
       // Check for DPoP nonce requirement
-      const dpopNonce = parRes.headers.get('dpop-nonce')
+      const dpopNonce = parRes.headers.get("dpop-nonce");
       if (dpopNonce && parRes.status === 400) {
-        console.log('[oauth/login] Retrying with DPoP nonce...')
+        console.log("[oauth/login] Retrying with DPoP nonce");
         const dpopProof2 = createDpopProof({
-          privateKey, jwk: publicJwk,
-          method: 'POST',
+          privateKey,
+          jwk: publicJwk,
+          method: "POST",
           url: parEndpoint,
           nonce: dpopNonce,
-        })
+        });
 
         const parRes2 = await fetch(parEndpoint, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'DPoP': dpopProof2,
+            "Content-Type": "application/x-www-form-urlencoded",
+            DPoP: dpopProof2,
           },
           body: parBody.toString(),
-        })
+        });
 
         if (!parRes2.ok) {
-          const errText2 = await parRes2.text()
-          console.error('[oauth/login] PAR retry failed:', parRes2.status, errText2)
-          return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('PAR failed: ' + errText2)}`, baseUrl))
+          console.error("[oauth/login] PAR retry failed:", parRes2.status);
+          return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
         }
 
-        const parData2 = await parRes2.json() as { request_uri: string }
-        const loginHint = email ? `&login_hint=${encodeURIComponent(email)}` : ''
-        const authUrl = `${authEndpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}${loginHint}`
-        console.log('[oauth/login] Redirecting to auth (after nonce retry)')
-        const resp2 = NextResponse.redirect(authUrl)
-        resp2.cookies.set('oauth_state', JSON.stringify({ state, codeVerifier, dpopPrivateJwk: privateJwk, tokenEndpoint, email }), { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' })
-        return resp2
+        const parData2 = (await parRes2.json()) as { request_uri: string };
+        const loginHint = email
+          ? `&login_hint=${encodeURIComponent(email)}`
+          : "";
+        const authUrl = `${authEndpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData2.request_uri)}${loginHint}`;
+        console.log("[oauth/login] Redirecting to auth (after nonce retry)");
+        const signedSessionId = createOAuthSession(sessionData);
+        const resp2 = NextResponse.redirect(authUrl);
+        resp2.cookies.set(SESSION_COOKIE, signedSessionId, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          maxAge: 600,
+          path: "/",
+        });
+        return resp2;
       }
 
-      return NextResponse.redirect(new URL(`/?error=${encodeURIComponent('PAR failed: ' + errText)}`, baseUrl))
+      return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
     }
 
-    const parData = await parRes.json() as { request_uri: string }
-    const loginHintParam = email ? `&login_hint=${encodeURIComponent(email)}` : ''
-    const authUrl = `${authEndpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}${loginHintParam}`
+    const parData = (await parRes.json()) as { request_uri: string };
+    const loginHintParam = email
+      ? `&login_hint=${encodeURIComponent(email)}`
+      : "";
+    const authUrl = `${authEndpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}${loginHintParam}`;
 
-    console.log('[oauth/login] Redirecting to auth:', authUrl.substring(0, 200))
-    const response = NextResponse.redirect(authUrl)
-    response.cookies.set('oauth_state', JSON.stringify({ state, codeVerifier, dpopPrivateJwk: privateJwk, tokenEndpoint, email }), { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' })
-    return response
+    console.log("[oauth/login] Redirecting to auth");
+    const signedSessionId = createOAuthSession(sessionData);
+    const response = NextResponse.redirect(authUrl);
+    response.cookies.set(SESSION_COOKIE, signedSessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/",
+    });
+    return response;
   } catch (err) {
-    console.error('[oauth/login] Error:', err)
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(errorMsg)}`, baseUrl))
+    console.error(
+      "[oauth/login] Error:",
+      err instanceof Error ? err.message : "Unknown error",
+    );
+    return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
   }
 }

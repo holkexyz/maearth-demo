@@ -46,7 +46,7 @@ function LoginForm() {
           action="/api/oauth/login"
           method="GET"
           style={{ margin: '0 auto', maxWidth: '290px' }}
-          onSubmit={() => setSubmitting(true)}
+          onSubmit={() => { setTimeout(() => setSubmitting(true), 0) }}
         >
           <div style={{ marginBottom: '16px', textAlign: 'left' }}>
             <label htmlFor="email" style={{
@@ -65,7 +65,7 @@ function LoginForm() {
               required
               autoFocus
               placeholder="you@example.com"
-              disabled={submitting}
+              readOnly={submitting}
               style={{
                 width: '100%',
                 padding: '12px 14px',

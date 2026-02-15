@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!stateCookie) {
       return NextResponse.redirect(new URL('/?error=invalid_state_no_cookie', baseUrl))
     }
-    let stateData: { state: string; codeVerifier: string; dpopPrivateJwk: Record<string, unknown> }
+    let stateData: { state: string; codeVerifier: string; dpopPrivateJwk: Record<string, unknown>; tokenEndpoint?: string }
     try {
       stateData = JSON.parse(stateCookie.value)
     } catch {
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=invalid_state_mismatch', baseUrl))
     }
     const codeVerifier = stateData.codeVerifier
+    const tokenUrl = stateData.tokenEndpoint || TOKEN_ENDPOINT
 
     const clientId = `${baseUrl}/client-metadata.json`
     const redirectUri = `${baseUrl}/api/oauth/callback`
@@ -63,10 +64,10 @@ export async function GET(request: NextRequest) {
     let dpopProof = createDpopProof({
       privateKey, jwk: publicJwk,
       method: 'POST',
-      url: TOKEN_ENDPOINT,
+      url: tokenUrl,
     })
 
-    let tokenRes = await fetch(TOKEN_ENDPOINT, {
+    let tokenRes = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -83,11 +84,11 @@ export async function GET(request: NextRequest) {
         dpopProof = createDpopProof({
           privateKey, jwk: publicJwk,
           method: 'POST',
-          url: TOKEN_ENDPOINT,
+          url: tokenUrl,
           nonce: dpopNonce,
         })
 
-        tokenRes = await fetch(TOKEN_ENDPOINT, {
+        tokenRes = await fetch(tokenUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',

@@ -116,3 +116,101 @@ export const AUTH_ENDPOINT = process.env.AUTH_ENDPOINT || 'https://auth.pds.cert
 export const TOKEN_ENDPOINT = `${PDS_URL}/oauth/token`
 
 export const PLC_DIRECTORY_URL = process.env.PLC_DIRECTORY_URL || 'https://plc.directory'
+
+// ATProto handle discovery
+
+const RESOLVE_TIMEOUT = 5000
+
+export async function resolveHandleToDid(handle: string): Promise<string> {
+  // Try public XRPC endpoint first (works for all handles including *.bsky.social)
+  try {
+    const res = await fetch(
+      `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`,
+      { signal: AbortSignal.timeout(RESOLVE_TIMEOUT) },
+    )
+    if (res.ok) {
+      const data = await res.json() as { did: string }
+      if (data.did) return data.did
+    }
+  } catch { /* fall through to well-known */ }
+
+  // Fallback: HTTP well-known (works for custom domain handles)
+  try {
+    const res = await fetch(
+      `https://${handle}/.well-known/atproto-did`,
+      { signal: AbortSignal.timeout(RESOLVE_TIMEOUT) },
+    )
+    if (res.ok) {
+      const text = await res.text()
+      const did = text.trim().split('\n')[0]?.trim()
+      if (did?.startsWith('did:')) return did
+    }
+  } catch { /* fall through */ }
+
+  throw new Error(`Could not resolve handle: ${handle}`)
+}
+
+export async function resolveDidToPds(did: string): Promise<string> {
+  let doc: { service?: Array<{ id: string; type: string; serviceEndpoint: string }> }
+
+  if (did.startsWith('did:plc:')) {
+    const res = await fetch(`${PLC_DIRECTORY_URL}/${did}`, {
+      signal: AbortSignal.timeout(RESOLVE_TIMEOUT),
+    })
+    if (!res.ok) throw new Error(`PLC directory lookup failed for ${did}`)
+    doc = await res.json()
+  } else if (did.startsWith('did:web:')) {
+    const host = did.replace('did:web:', '').replaceAll(':', '/')
+    const res = await fetch(`https://${host}/.well-known/did.json`, {
+      signal: AbortSignal.timeout(RESOLVE_TIMEOUT),
+    })
+    if (!res.ok) throw new Error(`DID web lookup failed for ${did}`)
+    doc = await res.json()
+  } else {
+    throw new Error(`Unsupported DID method: ${did}`)
+  }
+
+  const pdsService = doc.service?.find(
+    (s) => s.type === 'AtprotoPersonalDataServer' && s.id.endsWith('#atproto_pds'),
+  )
+  if (!pdsService?.serviceEndpoint) {
+    throw new Error(`No PDS found in DID document for ${did}`)
+  }
+  return pdsService.serviceEndpoint
+}
+
+export async function discoverOAuthEndpoints(pdsUrl: string): Promise<{
+  parEndpoint: string
+  authEndpoint: string
+  tokenEndpoint: string
+}> {
+  // Step 1: Get authorization server from protected resource metadata
+  const prRes = await fetch(`${pdsUrl}/.well-known/oauth-protected-resource`, {
+    signal: AbortSignal.timeout(RESOLVE_TIMEOUT),
+  })
+  if (!prRes.ok) throw new Error(`Failed to fetch protected resource metadata from ${pdsUrl}`)
+  const prData = await prRes.json() as { authorization_servers?: string[] }
+  const issuer = prData.authorization_servers?.[0]
+  if (!issuer) throw new Error(`No authorization server found for ${pdsUrl}`)
+
+  // Step 2: Get OAuth endpoints from authorization server metadata
+  const asRes = await fetch(`${issuer}/.well-known/oauth-authorization-server`, {
+    signal: AbortSignal.timeout(RESOLVE_TIMEOUT),
+  })
+  if (!asRes.ok) throw new Error(`Failed to fetch authorization server metadata from ${issuer}`)
+  const asMeta = await asRes.json() as {
+    pushed_authorization_request_endpoint?: string
+    authorization_endpoint?: string
+    token_endpoint?: string
+  }
+
+  if (!asMeta.pushed_authorization_request_endpoint || !asMeta.authorization_endpoint || !asMeta.token_endpoint) {
+    throw new Error(`Incomplete OAuth metadata from ${issuer}`)
+  }
+
+  return {
+    parEndpoint: asMeta.pushed_authorization_request_endpoint,
+    authEndpoint: asMeta.authorization_endpoint,
+    tokenEndpoint: asMeta.token_endpoint,
+  }
+}

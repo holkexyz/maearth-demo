@@ -7,6 +7,12 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const [submitting, setSubmitting] = useState(false)
+  const [mode, setMode] = useState<'email' | 'handle'>('email')
+
+  const switchMode = (newMode: 'email' | 'handle') => {
+    setMode(newMode)
+    setSubmitting(false)
+  }
 
   return (
     <div style={{
@@ -49,35 +55,58 @@ function LoginForm() {
           onSubmit={() => { setTimeout(() => setSubmitting(true), 0) }}
         >
           <div style={{ marginBottom: '16px', textAlign: 'left' }}>
-            <label htmlFor="email" style={{
+            <label htmlFor={mode === 'email' ? 'email' : 'handle'} style={{
               display: 'block',
               fontSize: '14px',
               fontWeight: 500,
               color: '#1A130F',
               marginBottom: '6px',
             }}>
-              Email address
+              {mode === 'email' ? 'Email address' : 'Handle'}
             </label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              required
-              autoFocus
-              placeholder="you@example.com"
-              readOnly={submitting}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                fontSize: '16px',
-                border: '1px solid #d4d0cb',
-                borderRadius: '8px',
-                outline: 'none',
-                boxSizing: 'border-box',
-                background: submitting ? '#f5f5f5' : '#fff',
-                color: '#1A130F',
-              }}
-            />
+            {mode === 'email' ? (
+              <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                autoFocus
+                placeholder="you@example.com"
+                readOnly={submitting}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  fontSize: '16px',
+                  border: '1px solid #d4d0cb',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  background: submitting ? '#f5f5f5' : '#fff',
+                  color: '#1A130F',
+                }}
+              />
+            ) : (
+              <input
+                type="text"
+                id="handle"
+                name="handle"
+                required
+                autoFocus
+                placeholder="you.bsky.social"
+                readOnly={submitting}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  fontSize: '16px',
+                  border: '1px solid #d4d0cb',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  background: submitting ? '#f5f5f5' : '#fff',
+                  color: '#1A130F',
+                }}
+              />
+            )}
           </div>
           <button
             type="submit"
@@ -99,17 +128,31 @@ function LoginForm() {
               opacity: submitting ? 0.7 : 1,
             }}
           >
-            {submitting ? (
-              'Sending verification code...'
+            {mode === 'email' ? (
+              submitting ? 'Sending verification code...' : (
+                <>
+                  <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
+                  <span style={{ width: '12px' }}></span>
+                  Sign in with Certified
+                </>
+              )
             ) : (
-              <>
-                <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
-                <span style={{ width: '12px' }}></span>
-                Sign in with Certified
-              </>
+              submitting ? 'Redirecting...' : 'Sign in'
             )}
           </button>
         </form>
+
+        <p
+          onClick={() => switchMode(mode === 'email' ? 'handle' : 'email')}
+          style={{
+            color: '#999',
+            fontSize: '13px',
+            cursor: 'pointer',
+            marginTop: '16px',
+          }}
+        >
+          {mode === 'email' ? 'Sign in with ATProto/Bluesky' : 'Sign in with Certified'}
+        </p>
       </div>
     </div>
   )

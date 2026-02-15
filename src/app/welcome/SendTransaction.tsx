@@ -20,6 +20,7 @@ export function SendTransaction({
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [balance, setBalance] = useState<string | null>(null);
+  const [balanceLoaded, setBalanceLoaded] = useState(false);
 
   const fetchBalance = useCallback(async () => {
     if (!smartAccountAddress) return;
@@ -30,10 +31,13 @@ export function SendTransaction({
       if (res.ok) {
         const data = await res.json();
         setBalance(data.balance);
+      } else {
+        setBalance(null);
       }
     } catch {
-      /* ignore */
+      setBalance(null);
     }
+    setBalanceLoaded(true);
   }, [smartAccountAddress]);
 
   useEffect(() => {
@@ -179,7 +183,11 @@ export function SendTransaction({
             fontFamily: "'SF Mono', Menlo, Consolas, monospace",
           }}
         >
-          {balance !== null ? `${parseFloat(balance).toFixed(6)} ETH` : "..."}
+          {!balanceLoaded
+            ? "..."
+            : balance !== null
+              ? `${parseFloat(balance).toFixed(6)} ETH`
+              : "n/a"}
         </div>
       </div>
 

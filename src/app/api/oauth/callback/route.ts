@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!stateCookie) {
       return NextResponse.redirect(new URL('/?error=invalid_state_no_cookie', baseUrl))
     }
-    let stateData: { state: string; codeVerifier: string; dpopPrivateJwk: Record<string, unknown>; tokenEndpoint?: string }
+    let stateData: { state: string; codeVerifier: string; dpopPrivateJwk: Record<string, unknown>; tokenEndpoint?: string; email?: string }
     try {
       stateData = JSON.parse(stateCookie.value)
     } catch {
@@ -143,6 +143,18 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24,
     })
+
+    // Provision wallet (fire-and-forget, don't block login)
+    if (process.env.WALLET_SERVICE_URL && process.env.WALLET_API_KEY && stateData.email) {
+      fetch(`${process.env.WALLET_SERVICE_URL}/wallet/provision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.WALLET_API_KEY,
+        },
+        body: JSON.stringify({ email: stateData.email, did: tokenData.sub }),
+      }).catch((err) => console.warn('[oauth/callback] Wallet provision failed:', err))
+    }
 
     return NextResponse.redirect(new URL('/welcome', baseUrl))
   } catch (err) {

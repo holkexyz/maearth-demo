@@ -177,10 +177,11 @@ export function SendTransaction({
         <div style={labelStyle}>Balance</div>
         <div
           style={{
-            fontSize: "16px",
+            fontSize: "12px",
             fontWeight: 600,
-            color: "#1A130F",
-            fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+            color: "#999",
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.5px",
           }}
         >
           {!balanceLoaded

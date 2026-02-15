@@ -1,4 +1,13 @@
-export default function Home() {
+"use client"
+
+import { useSearchParams } from 'next/navigation'
+import { useState, Suspense } from 'react'
+
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+  const [submitting, setSubmitting] = useState(false)
+
   return (
     <div style={{
       display: 'flex',
@@ -18,7 +27,27 @@ export default function Home() {
           <img src="/logo.png" alt="Ma Earth" style={{ height: '80px', marginBottom: '16px' }} />
         </div>
 
-        <form action="/api/oauth/login" method="GET" style={{ margin: '0 auto', maxWidth: '290px' }}>
+        {error && (
+          <div style={{
+            background: '#fdf0f0',
+            color: '#dc3545',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            marginBottom: '16px',
+            maxWidth: '290px',
+            margin: '0 auto 16px',
+          }}>
+            {decodeURIComponent(error)}
+          </div>
+        )}
+
+        <form
+          action="/api/oauth/login"
+          method="GET"
+          style={{ margin: '0 auto', maxWidth: '290px' }}
+          onSubmit={() => setSubmitting(true)}
+        >
           <div style={{ marginBottom: '16px', textAlign: 'left' }}>
             <label htmlFor="email" style={{
               display: 'block',
@@ -36,6 +65,7 @@ export default function Home() {
               required
               autoFocus
               placeholder="you@example.com"
+              disabled={submitting}
               style={{
                 width: '100%',
                 padding: '12px 14px',
@@ -44,13 +74,14 @@ export default function Home() {
                 borderRadius: '8px',
                 outline: 'none',
                 boxSizing: 'border-box',
-                background: '#fff',
+                background: submitting ? '#f5f5f5' : '#fff',
                 color: '#1A130F',
               }}
             />
           </div>
           <button
             type="submit"
+            disabled={submitting}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -60,19 +91,34 @@ export default function Home() {
               fontSize: '16px',
               fontWeight: 500,
               color: '#faf9f6',
-              background: '#1A130F',
+              background: submitting ? '#4a4a4a' : '#1A130F',
               border: 'none',
               borderRadius: '8px',
-              cursor: 'pointer',
+              cursor: submitting ? 'default' : 'pointer',
               letterSpacing: '0.3px',
+              opacity: submitting ? 0.7 : 1,
             }}
           >
-            <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
-            <span style={{ width: '12px' }}></span>
-            Sign in with Certified
+            {submitting ? (
+              'Signing in...'
+            ) : (
+              <>
+                <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />
+                <span style={{ width: '12px' }}></span>
+                Sign in with Certified
+              </>
+            )}
           </button>
         </form>
       </div>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

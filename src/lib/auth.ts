@@ -110,7 +110,9 @@ function derToRaw(der: Buffer): Buffer {
 }
 
 // PDS endpoints
-export const PDS_URL = 'https://pds.certs.network'
+export const PDS_URL = process.env.PDS_URL || 'https://pds.certs.network'
 export const PAR_ENDPOINT = `${PDS_URL}/oauth/par`
-export const AUTH_ENDPOINT = 'https://auth.pds.certs.network/oauth/authorize'
+export const AUTH_ENDPOINT = process.env.AUTH_ENDPOINT || 'https://auth.pds.certs.network/oauth/authorize'
 export const TOKEN_ENDPOINT = `${PDS_URL}/oauth/token`
+
+export const PLC_DIRECTORY_URL = process.env.PLC_DIRECTORY_URL || 'https://plc.directory'

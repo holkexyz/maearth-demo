@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as crypto from 'crypto'
 import {
   getBaseUrl, restoreDpopKeyPair, createDpopProof,
-  TOKEN_ENDPOINT, PDS_URL,
+  TOKEN_ENDPOINT, PDS_URL, PLC_DIRECTORY_URL,
 } from '@/lib/auth'
 import { cookies } from 'next/headers'
 
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     // Resolve handle from DID via PLC directory (no auth needed)
     let handle = tokenData.sub
     try {
-      const plcRes = await fetch(`https://plc.directory/${tokenData.sub}`)
+      const plcRes = await fetch(`${PLC_DIRECTORY_URL}/${tokenData.sub}`)
       if (plcRes.ok) {
         const plcData = await plcRes.json() as { alsoKnownAs?: string[] }
         const atUri = plcData.alsoKnownAs?.find((u: string) => u.startsWith('at://'))

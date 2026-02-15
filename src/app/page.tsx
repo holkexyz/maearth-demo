@@ -100,7 +100,7 @@ function LoginForm() {
             }}
           >
             {submitting ? (
-              'Signing in...'
+              'Sending verification code...'
             ) : (
               <>
                 <img src="/certified-logo.png" alt="" style={{ height: '20px' }} />

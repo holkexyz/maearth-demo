@@ -346,9 +346,7 @@ export function TwoFactorSetup({
           }}
           style={methodCardStyle}
         >
-          <div
-            style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}
-          >
+          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
             Passkey
           </div>
           <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
@@ -362,9 +360,7 @@ export function TwoFactorSetup({
           }}
           style={methodCardStyle}
         >
-          <div
-            style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}
-          >
+          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
             Authenticator app
           </div>
           <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
@@ -380,9 +376,7 @@ export function TwoFactorSetup({
           }}
           style={methodCardStyle}
         >
-          <div
-            style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}
-          >
+          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
             Second email
           </div>
           <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
@@ -436,7 +430,9 @@ export function TwoFactorSetup({
         <p
           style={{ fontSize: "13px", color: "#6b6b6b", margin: "4px 0 16px 0" }}
         >
-          {status === "loading" ? "Generating..." : "Setting up authenticator app."}
+          {status === "loading"
+            ? "Generating..."
+            : "Setting up authenticator app."}
         </p>
         <button
           onClick={() => setState("select-method")}
@@ -483,9 +479,7 @@ export function TwoFactorSetup({
         >
           {manualKey}
         </div>
-        <p
-          style={{ fontSize: "13px", color: "#6b6b6b", margin: "0 0 8px 0" }}
-        >
+        <p style={{ fontSize: "13px", color: "#6b6b6b", margin: "0 0 8px 0" }}>
           Enter the 6-digit code from your app:
         </p>
         <div style={{ marginBottom: "12px" }}>
@@ -580,7 +574,7 @@ export function TwoFactorSetup({
         >
           Enter the 6-digit code sent to {email}.
         </p>
-        <div style={{ marginBottom: "12px" }}>
+        <div style={{ marginBottom: "4px" }}>
           <input
             type="text"
             inputMode="numeric"
@@ -595,6 +589,29 @@ export function TwoFactorSetup({
             style={codeInputStyle}
             autoFocus
           />
+        </div>
+        <div style={{ textAlign: "right", marginBottom: "12px" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setCode("");
+              setErrorMsg("");
+              setStatus("idle");
+              handleEmailSend();
+            }}
+            disabled={status === "loading"}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#6b6b6b",
+              fontSize: "12px",
+              cursor: "pointer",
+              padding: "4px 0",
+              textDecoration: "underline",
+            }}
+          >
+            Resend code
+          </button>
         </div>
         <button
           onClick={handleEmailVerify}

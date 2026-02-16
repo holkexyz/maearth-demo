@@ -52,7 +52,15 @@ export async function POST(request: NextRequest) {
 
     const code = generateEmailOtp();
     await savePendingCode(session.userDid, code, "email-setup", email);
-    await sendEmailOtp(email, code);
+    try {
+      await sendEmailOtp(email, code);
+    } catch (err) {
+      console.error("[2fa] Failed to send email OTP:", err);
+      return NextResponse.json(
+        { error: "Failed to send verification email" },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({ success: true });
   }
@@ -65,10 +73,7 @@ export async function POST(request: NextRequest) {
 
     const result = await verifyPendingCode(session.userDid, code);
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
     await saveTwoFactorConfig(session.userDid, {

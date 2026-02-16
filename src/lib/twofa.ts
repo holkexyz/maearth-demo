@@ -132,9 +132,11 @@ export async function sendEmailOtp(email: string, code: string): Promise<void> {
   const from = process.env.SMTP_FROM || "noreply@maearth.com";
 
   if (!host || !user || !pass) {
-    console.log(`[2fa] Email OTP for ${email}: ${code}`);
+    console.log(`[2fa] Email OTP for ${email}: ${code} (SMTP not configured)`);
     return;
   }
+
+  console.log(`[2fa] Sending OTP email to ${email} via ${host}:${port}`);
 
   const transport = nodemailer.createTransport({
     host,

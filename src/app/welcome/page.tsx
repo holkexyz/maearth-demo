@@ -73,11 +73,51 @@ export default async function Welcome() {
             fontSize: "17px",
             color: "#6b6b6b",
             lineHeight: 1.6,
-            margin: "0 0 40px 0",
+            margin: "0 0 20px 0",
           }}
         >
           You are signed in.
         </p>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: "12px",
+          }}
+        >
+          <a
+            href="/welcome/settings"
+            title="Settings"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "36px",
+              height: "36px",
+              borderRadius: "8px",
+              border: "1px solid #d4d0cb",
+              background: "transparent",
+              color: "#6b6b6b",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </a>
+        </div>
 
         <div
           style={{
@@ -139,15 +179,9 @@ export default async function Welcome() {
           csrfToken={csrfToken}
         />
 
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            justifyContent: "center",
-          }}
-        >
-          <a
-            href="/welcome/settings"
+        <form action={signOut} style={{ textAlign: "center" }}>
+          <button
+            type="submit"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -155,39 +189,17 @@ export default async function Welcome() {
               padding: "14px 28px",
               fontSize: "16px",
               fontWeight: 500,
-              color: "#1A130F",
-              background: "transparent",
-              border: "1px solid #d4d0cb",
+              color: "#faf9f6",
+              background: "#1A130F",
+              border: "none",
               borderRadius: "8px",
               cursor: "pointer",
               letterSpacing: "0.3px",
-              textDecoration: "none",
             }}
           >
-            Settings
-          </a>
-          <form action={signOut}>
-            <button
-              type="submit"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "14px 28px",
-                fontSize: "16px",
-                fontWeight: 500,
-                color: "#faf9f6",
-                background: "#1A130F",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-                letterSpacing: "0.3px",
-              }}
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+            Sign out
+          </button>
+        </form>
       </div>
     </div>
   );

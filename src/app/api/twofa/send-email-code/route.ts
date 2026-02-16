@@ -25,11 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 });
   }
 
-  const rl = await checkRateLimit(
-    `twofa-email:${session.userDid}`,
-    3,
-    60000,
-  );
+  const rl = await checkRateLimit(`twofa-email:${session.userDid}`, 3, 60000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -44,7 +40,15 @@ export async function POST(request: NextRequest) {
 
   const code = generateEmailOtp();
   await savePendingCode(session.userDid, code, "email-verify", config.email);
-  await sendEmailOtp(config.email, code);
+  try {
+    await sendEmailOtp(config.email, code);
+  } catch (err) {
+    console.error("[2fa] Failed to send email OTP:", err);
+    return NextResponse.json(
+      { error: "Failed to send verification email" },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ success: true });
 }

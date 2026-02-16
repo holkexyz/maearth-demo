@@ -12,16 +12,30 @@ type SetupState =
   | "totp-verify"
   | "email-enter"
   | "email-verify"
-  | "disable-confirm"
+  | "remove-confirm"
   | "complete";
 
+const METHOD_LABELS: Record<Method, string> = {
+  passkey: "Passkey",
+  totp: "Authenticator app",
+  email: "Second email",
+};
+
+const METHOD_DESCRIPTIONS: Record<Method, string> = {
+  passkey: "Touch ID, Face ID, or security key",
+  totp: "Google Authenticator, Authy, or similar",
+  email: "Receive a code at a different email address",
+};
+
 export function TwoFactorSetup({
-  currentMethod,
+  enabledMethods: initialEnabledMethods,
+  defaultMethod: initialDefaultMethod,
   currentEmail,
   userHandle,
   csrfToken,
 }: {
-  currentMethod: Method | null;
+  enabledMethods: Method[];
+  defaultMethod: Method | null;
   currentEmail: string | null;
   userHandle: string;
   csrfToken: string;
@@ -33,12 +47,21 @@ export function TwoFactorSetup({
   const [email, setEmail] = useState("");
   const [qrSvg, setQrSvg] = useState("");
   const [manualKey, setManualKey] = useState("");
-  const [enabled, setEnabled] = useState(currentMethod !== null);
+  const [enabledMethods, setEnabledMethods] = useState<Method[]>(
+    initialEnabledMethods,
+  );
+  const [defaultMethod, setDefaultMethod] = useState<Method | null>(
+    initialDefaultMethod,
+  );
+  const [removingMethod, setRemovingMethod] = useState<Method | null>(null);
+  const [disableEmailSent, setDisableEmailSent] = useState(false);
 
   const headers = {
     "Content-Type": "application/json",
     "X-CSRF-Token": csrfToken,
   };
+
+  // --- Styles ---
 
   const labelStyle: React.CSSProperties = {
     fontSize: "12px",
@@ -143,7 +166,10 @@ export function TwoFactorSetup({
         throw new Error(data.error || "Registration failed");
       }
 
-      setEnabled(true);
+      setEnabledMethods((prev) =>
+        prev.includes("passkey") ? prev : [...prev, "passkey"],
+      );
+      if (!defaultMethod) setDefaultMethod("passkey");
       setState("complete");
       setStatus("idle");
     } catch (err) {
@@ -188,7 +214,10 @@ export function TwoFactorSetup({
         const data = await res.json();
         throw new Error(data.error || "Invalid code");
       }
-      setEnabled(true);
+      setEnabledMethods((prev) =>
+        prev.includes("totp") ? prev : [...prev, "totp"],
+      );
+      if (!defaultMethod) setDefaultMethod("totp");
       setState("complete");
       setStatus("idle");
     } catch (err) {
@@ -234,7 +263,10 @@ export function TwoFactorSetup({
         const data = await res.json();
         throw new Error(data.error || "Invalid code");
       }
-      setEnabled(true);
+      setEnabledMethods((prev) =>
+        prev.includes("email") ? prev : [...prev, "email"],
+      );
+      if (!defaultMethod) setDefaultMethod("email");
       setState("complete");
       setStatus("idle");
     } catch (err) {
@@ -243,13 +275,57 @@ export function TwoFactorSetup({
     }
   };
 
-  // --- Disable ---
-  const handleDisable = async () => {
+  // --- Set default ---
+  const handleSetDefault = async (method: Method) => {
     setStatus("loading");
     setErrorMsg("");
     try {
-      const body: Record<string, string> = {};
-      if (currentMethod === "totp" || currentMethod === "email") {
+      const res = await fetch("/api/twofa/set-default", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ method }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to set default");
+      }
+      setDefaultMethod(method);
+      setStatus("idle");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to set default");
+      setStatus("error");
+    }
+  };
+
+  // --- Remove method ---
+  const handleSendDisableCode = async () => {
+    setStatus("loading");
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/twofa/disable", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ method: "email", step: "send-code" }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to send code");
+      }
+      setDisableEmailSent(true);
+      setStatus("idle");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to send code");
+      setStatus("error");
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!removingMethod) return;
+    setStatus("loading");
+    setErrorMsg("");
+    try {
+      const body: Record<string, string> = { method: removingMethod };
+      if (removingMethod === "totp" || removingMethod === "email") {
         body.code = code.trim();
       }
       const res = await fetch("/api/twofa/disable", {
@@ -259,14 +335,20 @@ export function TwoFactorSetup({
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to disable 2FA");
+        throw new Error(data.error || "Failed to remove method");
       }
-      setEnabled(false);
-      setState("overview");
+      const newMethods = enabledMethods.filter((m) => m !== removingMethod);
+      setEnabledMethods(newMethods);
+      if (defaultMethod === removingMethod) {
+        setDefaultMethod(newMethods.length > 0 ? newMethods[0] : null);
+      }
+      setRemovingMethod(null);
       setCode("");
+      setDisableEmailSent(false);
+      setState("overview");
       setStatus("idle");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to disable");
+      setErrorMsg(err instanceof Error ? err.message : "Failed to remove");
       setStatus("error");
     }
   };
@@ -276,36 +358,121 @@ export function TwoFactorSetup({
     return (
       <div>
         <div style={labelStyle}>Two-Factor Authentication</div>
-        {enabled ? (
+        {enabledMethods.length > 0 ? (
           <>
-            <div
-              style={{
-                background: "#f0fdf4",
-                padding: "12px 16px",
-                borderRadius: "8px",
-                fontSize: "13px",
-                color: "#166534",
-                marginBottom: "16px",
-                marginTop: "8px",
-              }}
-            >
-              2FA is enabled
-              {currentMethod === "passkey" && " via passkey"}
-              {currentMethod === "totp" && " via authenticator app"}
-              {currentMethod === "email" &&
-                ` via email (${currentEmail ? currentEmail.replace(/^(.).*@/, "$1***@") : ""})`}
+            <div style={{ marginTop: "8px", marginBottom: "16px" }}>
+              {enabledMethods.map((method) => (
+                <div
+                  key={method}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    border: "1px solid #d4d0cb",
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        fontWeight: 500,
+                        color: "#1A130F",
+                      }}
+                    >
+                      {METHOD_LABELS[method]}
+                      {method === "email" && currentEmail && (
+                        <span
+                          style={{
+                            color: "#6b6b6b",
+                            fontWeight: 400,
+                            fontSize: "13px",
+                          }}
+                        >
+                          {" "}
+                          ({currentEmail.replace(/^(.).*@/, "$1***@")})
+                        </span>
+                      )}
+                    </div>
+                    {method === defaultMethod && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#166534",
+                          background: "#f0fdf4",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          marginTop: "4px",
+                          display: "inline-block",
+                        }}
+                      >
+                        Default
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      alignItems: "center",
+                    }}
+                  >
+                    {method !== defaultMethod && (
+                      <button
+                        onClick={() => handleSetDefault(method)}
+                        disabled={status === "loading"}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#6b6b6b",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          padding: "4px",
+                        }}
+                      >
+                        Set default
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setRemovingMethod(method);
+                        setCode("");
+                        setErrorMsg("");
+                        setStatus("idle");
+                        setDisableEmailSent(false);
+                        setState("remove-confirm");
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#dc3545",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        padding: "4px",
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <button
-              onClick={() => {
-                setState("disable-confirm");
-                setCode("");
-                setErrorMsg("");
-                setStatus("idle");
-              }}
-              style={dangerButtonStyle}
-            >
-              Disable 2FA
-            </button>
+            {enabledMethods.length < 3 && (
+              <button
+                onClick={() => {
+                  setState("select-method");
+                  setErrorMsg("");
+                  setStatus("idle");
+                }}
+                style={secondaryButtonStyle}
+              >
+                Add another method
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -336,53 +503,44 @@ export function TwoFactorSetup({
 
   // --- Method selection ---
   if (state === "select-method") {
+    const availableMethods: Method[] = (
+      ["passkey", "totp", "email"] as Method[]
+    ).filter((m) => !enabledMethods.includes(m));
+
     return (
       <div>
         <div style={labelStyle}>Choose a method</div>
-        <div
-          onClick={() => {
-            setState("passkey-setup");
-            handlePasskeySetup();
-          }}
-          style={methodCardStyle}
-        >
-          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
-            Passkey
+        {availableMethods.map((method) => (
+          <div
+            key={method}
+            onClick={() => {
+              if (method === "passkey") {
+                setState("passkey-setup");
+                handlePasskeySetup();
+              } else if (method === "totp") {
+                setState("totp-setup");
+                handleTotpInit();
+              } else {
+                setState("email-enter");
+                setEmail("");
+                setCode("");
+                setErrorMsg("");
+              }
+            }}
+            style={methodCardStyle}
+          >
+            <div
+              style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}
+            >
+              {METHOD_LABELS[method]}
+            </div>
+            <div
+              style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}
+            >
+              {METHOD_DESCRIPTIONS[method]}
+            </div>
           </div>
-          <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
-            Touch ID, Face ID, or security key
-          </div>
-        </div>
-        <div
-          onClick={() => {
-            setState("totp-setup");
-            handleTotpInit();
-          }}
-          style={methodCardStyle}
-        >
-          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
-            Authenticator app
-          </div>
-          <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
-            Google Authenticator, Authy, or similar
-          </div>
-        </div>
-        <div
-          onClick={() => {
-            setState("email-enter");
-            setEmail("");
-            setCode("");
-            setErrorMsg("");
-          }}
-          style={methodCardStyle}
-        >
-          <div style={{ fontSize: "15px", fontWeight: 500, color: "#1A130F" }}>
-            Second email
-          </div>
-          <div style={{ fontSize: "13px", color: "#6b6b6b", marginTop: "4px" }}>
-            Receive a code at a different email address
-          </div>
-        </div>
+        ))}
         <button
           onClick={() => setState("overview")}
           style={{ ...secondaryButtonStyle, marginTop: "8px" }}
@@ -633,13 +791,110 @@ export function TwoFactorSetup({
     );
   }
 
-  // --- Disable confirm ---
-  if (state === "disable-confirm") {
+  // --- Remove confirm ---
+  if (state === "remove-confirm" && removingMethod) {
+    const isLastMethod = enabledMethods.length === 1;
+
+    if (removingMethod === "passkey") {
+      return (
+        <div>
+          <div style={labelStyle}>Remove Passkey</div>
+          {errorBox}
+          <p
+            style={{
+              fontSize: "13px",
+              color: "#6b6b6b",
+              margin: "4px 0 16px 0",
+            }}
+          >
+            {isLastMethod
+              ? "This is your only 2FA method. Removing it will disable 2FA entirely."
+              : "Are you sure you want to remove passkey authentication?"}
+          </p>
+          <button
+            onClick={handleRemove}
+            disabled={status === "loading"}
+            style={{
+              ...dangerButtonStyle,
+              opacity: status === "loading" ? 0.7 : 1,
+            }}
+          >
+            {status === "loading" ? "Removing..." : "Confirm remove"}
+          </button>
+          <button
+            onClick={() => {
+              setState("overview");
+              setRemovingMethod(null);
+            }}
+            style={{ ...secondaryButtonStyle, marginTop: "8px" }}
+          >
+            Cancel
+          </button>
+        </div>
+      );
+    }
+
+    if (removingMethod === "totp") {
+      return (
+        <div>
+          <div style={labelStyle}>Remove Authenticator</div>
+          {errorBox}
+          <p
+            style={{
+              fontSize: "13px",
+              color: "#6b6b6b",
+              margin: "4px 0 12px 0",
+            }}
+          >
+            Enter your current authenticator code to confirm.
+            {isLastMethod && " This will disable 2FA entirely."}
+          </p>
+          <div style={{ marginBottom: "12px" }}>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, ""));
+                if (status === "error") setStatus("idle");
+              }}
+              disabled={status === "loading"}
+              style={codeInputStyle}
+              autoFocus
+            />
+          </div>
+          <button
+            onClick={handleRemove}
+            disabled={status === "loading" || code.length < 6}
+            style={{
+              ...dangerButtonStyle,
+              opacity: status === "loading" || code.length < 6 ? 0.7 : 1,
+            }}
+          >
+            {status === "loading" ? "Removing..." : "Confirm remove"}
+          </button>
+          <button
+            onClick={() => {
+              setState("overview");
+              setRemovingMethod(null);
+              setCode("");
+            }}
+            style={{ ...secondaryButtonStyle, marginTop: "8px" }}
+          >
+            Cancel
+          </button>
+        </div>
+      );
+    }
+
+    // Email removal — needs code sent first
     return (
       <div>
-        <div style={labelStyle}>Disable 2FA</div>
+        <div style={labelStyle}>Remove Email 2FA</div>
         {errorBox}
-        {currentMethod === "passkey" ? (
+        {!disableEmailSent ? (
           <>
             <p
               style={{
@@ -648,17 +903,18 @@ export function TwoFactorSetup({
                 margin: "4px 0 16px 0",
               }}
             >
-              Are you sure you want to disable two-factor authentication?
+              We need to verify your email to remove this method.
+              {isLastMethod && " This will disable 2FA entirely."}
             </p>
             <button
-              onClick={handleDisable}
+              onClick={handleSendDisableCode}
               disabled={status === "loading"}
               style={{
                 ...dangerButtonStyle,
                 opacity: status === "loading" ? 0.7 : 1,
               }}
             >
-              {status === "loading" ? "Disabling..." : "Confirm disable"}
+              {status === "loading" ? "Sending..." : "Send verification code"}
             </button>
           </>
         ) : (
@@ -670,9 +926,10 @@ export function TwoFactorSetup({
                 margin: "4px 0 12px 0",
               }}
             >
-              Enter your current 2FA code to confirm.
+              Enter the code sent to your email.
+              {isLastMethod && " This will disable 2FA entirely."}
             </p>
-            <div style={{ marginBottom: "12px" }}>
+            <div style={{ marginBottom: "4px" }}>
               <input
                 type="text"
                 inputMode="numeric"
@@ -688,24 +945,47 @@ export function TwoFactorSetup({
                 autoFocus
               />
             </div>
+            <div style={{ textAlign: "right", marginBottom: "12px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setCode("");
+                  setErrorMsg("");
+                  setStatus("idle");
+                  handleSendDisableCode();
+                }}
+                disabled={status === "loading"}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#6b6b6b",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  padding: "4px 0",
+                  textDecoration: "underline",
+                }}
+              >
+                Resend code
+              </button>
+            </div>
             <button
-              onClick={handleDisable}
+              onClick={handleRemove}
               disabled={status === "loading" || code.length < 6}
               style={{
                 ...dangerButtonStyle,
                 opacity: status === "loading" || code.length < 6 ? 0.7 : 1,
               }}
             >
-              {status === "loading" ? "Disabling..." : "Confirm disable"}
+              {status === "loading" ? "Removing..." : "Confirm remove"}
             </button>
           </>
         )}
         <button
           onClick={() => {
             setState("overview");
+            setRemovingMethod(null);
             setCode("");
-            setErrorMsg("");
-            setStatus("idle");
+            setDisableEmailSent(false);
           }}
           style={{ ...secondaryButtonStyle, marginTop: "8px" }}
         >
@@ -731,12 +1011,13 @@ export function TwoFactorSetup({
             marginBottom: "16px",
           }}
         >
-          2FA has been enabled successfully.
+          Method added successfully.
         </div>
         <button
           onClick={() => {
             setState("overview");
-            window.location.reload();
+            setCode("");
+            setErrorMsg("");
           }}
           style={buttonStyle}
         >

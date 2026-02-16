@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionFromCookie } from "@/lib/session";
-import { getTwoFactorConfig } from "@/lib/twofa";
+import {
+  getTwoFactorConfig,
+  getEnabledMethods,
+  getMethodConfig,
+} from "@/lib/twofa";
 import { generateCsrfToken } from "@/lib/csrf";
 import { TwoFactorSetup } from "./TwoFactorSetup";
 
@@ -19,6 +23,10 @@ export default async function Settings() {
 
   const config = await getTwoFactorConfig(session.userDid);
   const csrfToken = generateCsrfToken();
+
+  const enabledMethods = config ? getEnabledMethods(config) : [];
+  const defaultMethod = config?.defaultMethod ?? null;
+  const emailConfig = config ? getMethodConfig(config, "email") : undefined;
 
   return (
     <div
@@ -65,8 +73,9 @@ export default async function Settings() {
           }}
         >
           <TwoFactorSetup
-            currentMethod={config?.method ?? null}
-            currentEmail={config?.email ?? null}
+            enabledMethods={enabledMethods}
+            defaultMethod={defaultMethod}
+            currentEmail={emailConfig?.address ?? null}
             userHandle={session.userHandle}
             csrfToken={csrfToken}
           />

@@ -9,7 +9,9 @@ import {
   sendEmailOtp,
   savePendingCode,
   verifyPendingCode,
+  getTwoFactorConfig,
   saveTwoFactorConfig,
+  addMethod,
 } from "@/lib/twofa";
 
 export const runtime = "nodejs";
@@ -76,11 +78,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    await saveTwoFactorConfig(session.userDid, {
-      method: "email",
-      email: result.email,
+    // Additive save: preserve other methods
+    const existing = await getTwoFactorConfig(session.userDid);
+    const updated = addMethod(existing, {
+      type: "email",
+      address: result.email!,
       enabledAt: Date.now(),
     });
+    await saveTwoFactorConfig(session.userDid, updated);
 
     return NextResponse.json({ success: true });
   }

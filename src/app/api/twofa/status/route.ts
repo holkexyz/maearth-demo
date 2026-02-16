@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSessionFromCookie } from "@/lib/session";
-import { getTwoFactorConfig } from "@/lib/twofa";
+import { getTwoFactorConfig, getEnabledMethods } from "@/lib/twofa";
 
 export const runtime = "nodejs";
 
@@ -15,15 +15,25 @@ export async function GET() {
 
   const config = await getTwoFactorConfig(session.userDid);
 
-  if (!config) {
+  if (!config || config.methods.length === 0) {
     return NextResponse.json({ enabled: false });
   }
 
+  const methods = config.methods.map((m) => {
+    if (m.type === "email") {
+      return {
+        type: m.type,
+        address: m.address.replace(/^(.).*@/, "$1***@"),
+        enabledAt: m.enabledAt,
+      };
+    }
+    return { type: m.type, enabledAt: m.enabledAt };
+  });
+
   return NextResponse.json({
     enabled: true,
-    method: config.method,
-    email: config.email
-      ? config.email.replace(/^(.).*@/, "$1***@")
-      : undefined,
+    defaultMethod: config.defaultMethod,
+    methods,
+    enabledMethods: getEnabledMethods(config),
   });
 }

@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import {
-  getSessionFromCookie,
-  createUserSessionCookie,
-  SESSION_COOKIE,
-} from "@/lib/session";
+import { getSessionFromCookie, createUserSessionCookie } from "@/lib/session";
 import { validateCsrfToken } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getTwoFactorConfig,
+  getMethodConfig,
   verifyTotpCode,
   verifyPendingCode,
+  type TwoFactorMethod,
 } from "@/lib/twofa";
 
 export const runtime = "nodejs";
@@ -36,7 +34,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { code?: string };
+  let body: { code?: string; method?: TwoFactorMethod };
   try {
     body = await request.json();
   } catch {
@@ -53,11 +51,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "2FA not configured" }, { status: 400 });
   }
 
+  // Use requested method or fall back to default
+  const method = body.method || config.defaultMethod;
   let valid = false;
 
-  if (config.method === "totp" && config.totpSecret) {
-    valid = verifyTotpCode(config.totpSecret, code);
-  } else if (config.method === "email") {
+  if (method === "totp") {
+    const totpConfig = getMethodConfig(config, "totp");
+    if (totpConfig) {
+      valid = verifyTotpCode(totpConfig.secret, code);
+    }
+  } else if (method === "email") {
     const result = await verifyPendingCode(session.userDid, code);
     valid = result.success;
     if (!valid) {

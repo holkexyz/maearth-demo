@@ -7,7 +7,9 @@ import {
   generateTotpSecret,
   getTotpUri,
   verifyTotpCode,
+  getTwoFactorConfig,
   saveTwoFactorConfig,
+  addMethod,
   savePendingTotpSecret,
   getPendingTotpSecret,
   deletePendingTotpSecret,
@@ -52,7 +54,6 @@ export async function POST(request: NextRequest) {
       margin: 1,
     });
 
-    // Store secret for verification step
     await savePendingTotpSecret(session.userDid, secret);
 
     return NextResponse.json({ qrCodeSvg, secret });
@@ -75,12 +76,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid code" }, { status: 400 });
     }
 
-    // Save permanent config
-    await saveTwoFactorConfig(session.userDid, {
-      method: "totp",
-      totpSecret: secret,
+    // Additive save: preserve other methods
+    const existing = await getTwoFactorConfig(session.userDid);
+    const updated = addMethod(existing, {
+      type: "totp",
+      secret,
       enabledAt: Date.now(),
     });
+    await saveTwoFactorConfig(session.userDid, updated);
     await deletePendingTotpSecret(session.userDid);
 
     return NextResponse.json({ success: true });

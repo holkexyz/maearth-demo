@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import {
-  getSessionFromCookie,
-  createUserSessionCookie,
-} from "@/lib/session";
+import { getSessionFromCookie, createUserSessionCookie } from "@/lib/session";
 import { validateCsrfToken } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getTwoFactorConfig,
   deleteTwoFactorConfig,
+  saveTwoFactorConfig,
+  removeMethod,
+  getMethodConfig,
   verifyTotpCode,
   verifyPendingCode,
+  generateEmailOtp,
+  sendEmailOtp,
+  savePendingCode,
+  deletePasskeyCredentials,
+  type TwoFactorMethod,
 } from "@/lib/twofa";
 
 export const runtime = "nodejs";
@@ -38,23 +43,60 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "2FA not enabled" }, { status: 400 });
   }
 
-  let body: { code?: string };
+  let body: { method?: TwoFactorMethod; code?: string; step?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // For TOTP and email, require current code to disable
-  if (config.method === "totp") {
+  const targetMethod = body.method;
+
+  // Email disable: send code step
+  if (targetMethod === "email" && body.step === "send-code") {
+    const emailConfig = getMethodConfig(config, "email");
+    if (!emailConfig) {
+      return NextResponse.json(
+        { error: "Email 2FA not configured" },
+        { status: 400 },
+      );
+    }
+    const code = generateEmailOtp();
+    await savePendingCode(
+      session.userDid,
+      code,
+      "email-disable",
+      emailConfig.address,
+    );
+    try {
+      await sendEmailOtp(emailConfig.address, code);
+    } catch (err) {
+      console.error("[2fa] Failed to send disable email OTP:", err);
+      return NextResponse.json(
+        { error: "Failed to send verification email" },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  // Verify code for TOTP or email removal
+  if (targetMethod === "totp") {
+    const totpConfig = getMethodConfig(config, "totp");
+    if (!totpConfig) {
+      return NextResponse.json(
+        { error: "TOTP not configured" },
+        { status: 400 },
+      );
+    }
     const code = (body.code || "").trim();
     if (!code || code.length !== 6) {
       return NextResponse.json({ error: "Code required" }, { status: 400 });
     }
-    if (!config.totpSecret || !verifyTotpCode(config.totpSecret, code)) {
+    if (!verifyTotpCode(totpConfig.secret, code)) {
       return NextResponse.json({ error: "Invalid code" }, { status: 400 });
     }
-  } else if (config.method === "email") {
+  } else if (targetMethod === "email") {
     const code = (body.code || "").trim();
     if (!code || code.length !== 6) {
       return NextResponse.json({ error: "Code required" }, { status: 400 });
@@ -67,11 +109,27 @@ export async function POST(request: NextRequest) {
       );
     }
   }
-  // Passkey: no code needed (already authenticated via session)
+  // Passkey: no code needed
 
-  await deleteTwoFactorConfig(session.userDid);
+  // Remove specific method or all
+  if (targetMethod) {
+    const updated = removeMethod(config, targetMethod);
+    if (updated) {
+      // Clean up passkey credentials if removing passkey
+      if (targetMethod === "passkey") {
+        await deletePasskeyCredentials(session.userDid);
+      }
+      await saveTwoFactorConfig(session.userDid, updated);
+    } else {
+      // Last method removed — delete everything
+      await deleteTwoFactorConfig(session.userDid);
+    }
+  } else {
+    // No method specified — remove all (backward compat)
+    await deleteTwoFactorConfig(session.userDid);
+  }
 
-  // Refresh session cookie without 2FA flag concerns
+  // Refresh session cookie
   const newCookie = createUserSessionCookie({
     userDid: session.userDid,
     userHandle: session.userHandle,

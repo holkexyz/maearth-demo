@@ -25,7 +25,38 @@ function requireRedis(): Redis {
 
 // --- Types ---
 
+export type TwoFactorMethod = "totp" | "email" | "passkey";
+
+export interface TotpMethodConfig {
+  type: "totp";
+  secret: string;
+  enabledAt: number;
+}
+
+export interface EmailMethodConfig {
+  type: "email";
+  address: string;
+  enabledAt: number;
+}
+
+export interface PasskeyMethodConfig {
+  type: "passkey";
+  enabledAt: number;
+}
+
+export type MethodConfig =
+  | TotpMethodConfig
+  | EmailMethodConfig
+  | PasskeyMethodConfig;
+
 export interface TwoFactorConfig {
+  version: 2;
+  defaultMethod: TwoFactorMethod;
+  methods: MethodConfig[];
+}
+
+// Legacy v1 config shape (for migration)
+interface LegacyTwoFactorConfig {
   method: "totp" | "email" | "passkey";
   email?: string;
   totpSecret?: string;
@@ -41,10 +72,41 @@ export interface PasskeyCredential {
 
 interface PendingVerification {
   codeHash: string;
-  type: "totp-setup" | "email-setup" | "email-verify";
+  type: "totp-setup" | "email-setup" | "email-verify" | "email-disable";
   expiresAt: number;
   attempts: number;
   email?: string;
+}
+
+// --- Migration ---
+
+function migrateV1ToV2(legacy: LegacyTwoFactorConfig): TwoFactorConfig {
+  const methods: MethodConfig[] = [];
+
+  if (legacy.method === "totp" && legacy.totpSecret) {
+    methods.push({
+      type: "totp",
+      secret: legacy.totpSecret,
+      enabledAt: legacy.enabledAt,
+    });
+  } else if (legacy.method === "email" && legacy.email) {
+    methods.push({
+      type: "email",
+      address: legacy.email,
+      enabledAt: legacy.enabledAt,
+    });
+  } else if (legacy.method === "passkey") {
+    methods.push({
+      type: "passkey",
+      enabledAt: legacy.enabledAt,
+    });
+  }
+
+  return {
+    version: 2,
+    defaultMethod: legacy.method,
+    methods,
+  };
 }
 
 // --- Config Storage ---
@@ -60,7 +122,17 @@ export async function getTwoFactorConfig(
   const r = requireRedis();
   const data = await r.get<string>(CONFIG_KEY(did));
   if (!data) return null;
-  return typeof data === "string" ? JSON.parse(data) : data;
+
+  const parsed = typeof data === "string" ? JSON.parse(data) : data;
+
+  // Lazy migration: v1 → v2
+  if (!parsed.version) {
+    const migrated = migrateV1ToV2(parsed as LegacyTwoFactorConfig);
+    await r.set(CONFIG_KEY(did), JSON.stringify(migrated));
+    return migrated;
+  }
+
+  return parsed as TwoFactorConfig;
 }
 
 export async function saveTwoFactorConfig(
@@ -80,7 +152,78 @@ export async function deleteTwoFactorConfig(did: string): Promise<void> {
 export async function hasTwoFactorEnabled(did: string): Promise<boolean> {
   if (!redis) return false;
   const config = await getTwoFactorConfig(did);
-  return config !== null;
+  return config !== null && config.methods.length > 0;
+}
+
+// --- Multi-method helpers ---
+
+export function getMethodConfig<T extends TwoFactorMethod>(
+  config: TwoFactorConfig,
+  type: T,
+): Extract<MethodConfig, { type: T }> | undefined {
+  return config.methods.find((m) => m.type === type) as
+    | Extract<MethodConfig, { type: T }>
+    | undefined;
+}
+
+export function getEnabledMethods(config: TwoFactorConfig): TwoFactorMethod[] {
+  return config.methods.map((m) => m.type);
+}
+
+export function addMethod(
+  config: TwoFactorConfig | null,
+  method: MethodConfig,
+): TwoFactorConfig {
+  if (!config) {
+    return {
+      version: 2,
+      defaultMethod: method.type,
+      methods: [method],
+    };
+  }
+
+  // Replace if same type already exists
+  const filtered = config.methods.filter((m) => m.type !== method.type);
+  filtered.push(method);
+
+  return {
+    version: 2,
+    defaultMethod: config.defaultMethod,
+    methods: filtered,
+  };
+}
+
+export function removeMethod(
+  config: TwoFactorConfig,
+  type: TwoFactorMethod,
+): TwoFactorConfig | null {
+  const filtered = config.methods.filter((m) => m.type !== type);
+  if (filtered.length === 0) return null;
+
+  // If we removed the default, pick the first remaining method
+  const defaultMethod =
+    config.defaultMethod === type ? filtered[0].type : config.defaultMethod;
+
+  return {
+    version: 2,
+    defaultMethod,
+    methods: filtered,
+  };
+}
+
+export async function setDefaultMethod(
+  did: string,
+  method: TwoFactorMethod,
+): Promise<{ success: boolean; error?: string }> {
+  const config = await getTwoFactorConfig(did);
+  if (!config) return { success: false, error: "2FA not enabled" };
+
+  const hasMethod = config.methods.some((m) => m.type === method);
+  if (!hasMethod) return { success: false, error: "Method not enabled" };
+
+  config.defaultMethod = method;
+  await saveTwoFactorConfig(did, config);
+  return { success: true };
 }
 
 // --- TOTP ---
@@ -287,6 +430,11 @@ export async function updatePasskeyCounter(
     cred.counter = newCounter;
     await r.set(CREDENTIALS_KEY(did), JSON.stringify(credentials));
   }
+}
+
+export async function deletePasskeyCredentials(did: string): Promise<void> {
+  const r = requireRedis();
+  await r.del(CREDENTIALS_KEY(did));
 }
 
 export async function saveChallenge(

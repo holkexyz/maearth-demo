@@ -5,7 +5,9 @@ import { validateCsrfToken } from "@/lib/csrf";
 import {
   getAndDeleteChallenge,
   savePasskeyCredential,
+  getTwoFactorConfig,
   saveTwoFactorConfig,
+  addMethod,
 } from "@/lib/twofa";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { getBaseUrl } from "@/lib/auth";
@@ -68,10 +70,13 @@ export async function POST(request: NextRequest) {
       transports: (body.response as { transports?: string[] })?.transports,
     });
 
-    await saveTwoFactorConfig(session.userDid, {
-      method: "passkey",
+    // Additive save: preserve other methods
+    const existing = await getTwoFactorConfig(session.userDid);
+    const updated = addMethod(existing, {
+      type: "passkey",
       enabledAt: Date.now(),
     });
+    await saveTwoFactorConfig(session.userDid, updated);
 
     return NextResponse.json({ success: true });
   } catch (err) {

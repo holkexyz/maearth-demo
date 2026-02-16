@@ -5,6 +5,7 @@ import { validateCsrfToken } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getTwoFactorConfig,
+  getMethodConfig,
   generateEmailOtp,
   sendEmailOtp,
   savePendingCode,
@@ -31,7 +32,12 @@ export async function POST(request: NextRequest) {
   }
 
   const config = await getTwoFactorConfig(session.userDid);
-  if (!config || config.method !== "email" || !config.email) {
+  if (!config) {
+    return NextResponse.json({ error: "2FA not configured" }, { status: 400 });
+  }
+
+  const emailConfig = getMethodConfig(config, "email");
+  if (!emailConfig) {
     return NextResponse.json(
       { error: "Email 2FA not configured" },
       { status: 400 },
@@ -39,9 +45,14 @@ export async function POST(request: NextRequest) {
   }
 
   const code = generateEmailOtp();
-  await savePendingCode(session.userDid, code, "email-verify", config.email);
+  await savePendingCode(
+    session.userDid,
+    code,
+    "email-verify",
+    emailConfig.address,
+  );
   try {
-    await sendEmailOtp(config.email, code);
+    await sendEmailOtp(emailConfig.address, code);
   } catch (err) {
     console.error("[2fa] Failed to send email OTP:", err);
     return NextResponse.json(

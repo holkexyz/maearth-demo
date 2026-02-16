@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionFromCookie } from "@/lib/session";
-import { getTwoFactorConfig } from "@/lib/twofa";
+import { getTwoFactorConfig, getEnabledMethods } from "@/lib/twofa";
 import { generateCsrfToken } from "@/lib/csrf";
 import { TwoFactorVerify } from "./TwoFactorVerify";
 
@@ -19,12 +19,13 @@ export default async function VerifyTwoFactor() {
   }
 
   const config = await getTwoFactorConfig(session.userDid);
-  if (!config) {
+  if (!config || config.methods.length === 0) {
     // No 2FA config found — shouldn't happen, redirect to welcome
     redirect("/welcome");
   }
 
   const csrfToken = generateCsrfToken();
+  const enabledMethods = getEnabledMethods(config);
 
   return (
     <div
@@ -70,7 +71,8 @@ export default async function VerifyTwoFactor() {
           }}
         >
           <TwoFactorVerify
-            method={config.method}
+            defaultMethod={config.defaultMethod}
+            enabledMethods={enabledMethods}
             csrfToken={csrfToken}
           />
         </div>

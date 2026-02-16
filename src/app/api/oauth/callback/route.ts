@@ -125,15 +125,10 @@ export async function GET(request: NextRequest) {
       scope?: string;
     };
 
-    console.log(
-      "[oauth/callback] Token exchange successful, sub:",
-      tokenData.sub,
-    );
-
     // Validate sub matches expected DID (blocks malicious PDS impersonation)
     if (stateData.expectedDid && tokenData.sub !== stateData.expectedDid) {
       console.error(
-        "[oauth/callback] DID mismatch: token sub does not match expected DID",
+        `[oauth/callback] FAIL=did_mismatch sub=${tokenData.sub} expected=${stateData.expectedDid}`,
       );
       return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
     }
@@ -144,17 +139,13 @@ export async function GET(request: NextRequest) {
       const expectedOrigin = new URL(stateData.expectedPdsUrl).origin;
       if (tokenOrigin !== expectedOrigin) {
         console.error(
-          "[oauth/callback] Issuer mismatch: token endpoint",
-          tokenOrigin,
-          "vs expected",
-          expectedOrigin,
+          `[oauth/callback] FAIL=issuer_mismatch token=${tokenOrigin} expected=${expectedOrigin}`,
         );
         return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
       }
     }
 
     // For email login: verify the returned DID's PDS matches our token endpoint
-    // This prevents a compromised PDS from claiming arbitrary DIDs
     if (!stateData.expectedDid && tokenData.sub) {
       try {
         const didPdsUrl = await resolveDidToPds(tokenData.sub);
@@ -162,26 +153,19 @@ export async function GET(request: NextRequest) {
         const tokenOrigin = new URL(tokenUrl).origin;
         if (didPdsOrigin !== tokenOrigin) {
           console.error(
-            "[oauth/callback] Email flow: DID PDS mismatch -",
-            didPdsOrigin,
-            "vs",
-            tokenOrigin,
+            `[oauth/callback] FAIL=email_pds_mismatch did_pds=${didPdsOrigin} token=${tokenOrigin}`,
           );
           return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
         }
       } catch (err) {
         console.error(
-          "[oauth/callback] Email flow: Could not verify DID PDS ownership:",
-          err instanceof Error ? err.message : err,
+          `[oauth/callback] FAIL=email_pds_resolve error=${err instanceof Error ? err.message : err}`,
         );
         return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
       }
     }
 
-    console.log(
-      "[oauth/callback] Authentication successful for",
-      sanitizeForLog(tokenData.sub),
-    );
+    console.log(`[oauth/callback] OK sub=${sanitizeForLog(tokenData.sub)}`);
 
     // Resolve handle from DID via PLC directory (no auth needed)
     let handle = tokenData.sub;

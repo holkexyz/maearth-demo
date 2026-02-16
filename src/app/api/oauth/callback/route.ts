@@ -133,17 +133,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
     }
 
-    // Validate token endpoint origin matches expected PDS
-    if (stateData.expectedPdsUrl) {
-      const tokenOrigin = new URL(tokenUrl).origin;
-      const expectedOrigin = new URL(stateData.expectedPdsUrl).origin;
-      if (tokenOrigin !== expectedOrigin) {
-        console.error(
-          `[oauth/callback] FAIL=issuer_mismatch token=${tokenOrigin} expected=${expectedOrigin}`,
-        );
-        return NextResponse.redirect(new URL("/?error=auth_failed", baseUrl));
-      }
-    }
+    // Note: we don't compare token endpoint origin against expectedPdsUrl
+    // because ATProto allows PDS to delegate auth to a separate authorization
+    // server (e.g. Bluesky PDS delegates to bsky.social). The DID check above
+    // is sufficient for handle-based login security.
 
     // For email login: verify the returned DID's PDS matches our token endpoint
     if (!stateData.expectedDid && tokenData.sub) {
